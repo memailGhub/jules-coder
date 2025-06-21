@@ -1,0 +1,251 @@
+// Configuration
+const API_BASE_URL = 'http://localhost:8000'; // Assuming backend runs on this port
+
+// DOM Elements (Cache them for performance and convenience)
+const indexSelect = document.getElementById('index-select');
+const fetchMarketDataBtn = document.getElementById('fetch-market-data-btn');
+const spotPriceEl = document.getElementById('spot-price');
+const vwapEl = document.getElementById('vwap');
+const atrEl = document.getElementById('atr');
+const marketDataTimestampEl = document.getElementById('market-data-timestamp');
+const marketDataLoaderEl = document.getElementById('market-data-loader');
+const marketDataErrorEl = document.getElementById('market-data-error');
+
+const recommendationForm = document.getElementById('recommendation-form');
+const recommendationDisplayEl = document.getElementById('recommendation-display');
+const recommendationLoaderEl = document.getElementById('recommendation-loader');
+const recommendationErrorEl = document.getElementById('recommendation-error');
+
+// --- Utility Functions ---
+
+function showLoader(loaderElement) {
+    if (loaderElement) loaderElement.style.display = 'block';
+}
+
+function hideLoader(loaderElement) {
+    if (loaderElement) loaderElement.style.display = 'none';
+}
+
+function showError(errorElement, message) {
+    if (errorElement) {
+        errorElement.textContent = message;
+        errorElement.style.display = 'block';
+    }
+}
+
+function hideError(errorElement) {
+    if (errorElement) {
+        errorElement.textContent = '';
+        errorElement.style.display = 'none';
+    }
+}
+
+function clearElementText(...elements) {
+    elements.forEach(el => {
+        if (el) el.textContent = '-';
+    });
+}
+
+// --- API Client Functions ---
+
+async function fetchFromAPI(endpoint, params = null) {
+    let url = `${API_BASE_URL}${endpoint}`;
+    if (params) {
+        url += `?${new URLSearchParams(params)}`;
+    }
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            let errorData;
+            try {
+                errorData = await response.json();
+            } catch (e) {
+                // If error response is not JSON
+                errorData = { detail: `HTTP error ${response.status}: ${response.statusText}` };
+            }
+            throw new Error(errorData.detail || `HTTP error ${response.status}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('API Fetch Error:', error);
+        throw error; // Re-throw to be caught by calling function
+    }
+}
+
+// --- Market Data Logic ---
+
+async function handleFetchMarketData() {
+    showLoader(marketDataLoaderEl);
+    hideError(marketDataErrorEl);
+    clearElementText(spotPriceEl, vwapEl, atrEl, marketDataTimestampEl);
+
+    const indexName = indexSelect.value;
+    if (!indexName) {
+        showError(marketDataErrorEl, 'Please select an index.');
+        hideLoader(marketDataLoaderEl);
+        return;
+    }
+
+    try {
+        const data = await fetchFromAPI(`/live-data/${indexName}`);
+        if (data) {
+            spotPriceEl.textContent = data.spot_price !== null && data.spot_price !== undefined ? data.spot_price.toFixed(2) : '-';
+            vwapEl.textContent = data.vwap !== null && data.vwap !== undefined ? data.vwap.toFixed(2) : '-';
+            atrEl.textContent = data.atr !== null && data.atr !== undefined ? data.atr.toFixed(2) : '-';
+            marketDataTimestampEl.textContent = data.timestamp ? new Date(data.timestamp).toLocaleString() : '-';
+        } else {
+            showError(marketDataErrorEl, 'Received no data from API.');
+        }
+    } catch (error) {
+        showError(marketDataErrorEl, `Failed to fetch market data: ${error.message}`);
+    } finally {
+        hideLoader(marketDataLoaderEl);
+    }
+}
+
+// --- Strategy Recommendation Logic (to be completed in next step) ---
+
+async function handleGetRecommendation(event) {
+    event.preventDefault();
+    showLoader(recommendationLoaderEl);
+    hideError(recommendationErrorEl);
+    recommendationDisplayEl.innerHTML = '';
+
+    const indexName = indexSelect.value;
+    if (!indexName) {
+        showError(recommendationErrorEl, 'Please select an index first from the Market Snapshot section.');
+        hideLoader(recommendationLoaderEl);
+        return;
+    }
+
+    const formData = new FormData(recommendationForm);
+    const params = Object.fromEntries(formData.entries());
+
+    if (!params.max_loss_amount || parseFloat(params.max_loss_amount) <= 0) {
+        showError(recommendationErrorEl, 'Max Loss Amount must be a positive number.');
+        hideLoader(recommendationLoaderEl);
+        return;
+    }
+
+    try {
+        const data = await fetchFromAPI(`/recommendation/${indexName}`, params);
+        displayRecommendation(data);
+    } catch (error) {
+        showError(recommendationErrorEl, `Failed to get recommendation: ${error.message}`);
+        recommendationDisplayEl.innerHTML = '<p>Could not retrieve a recommendation. Please check inputs and try again.</p>';
+    } finally {
+        hideLoader(recommendationLoaderEl);
+    }
+}
+
+function displayRecommendation(data) {
+    recommendationDisplayEl.innerHTML = '';
+
+    if (!data) {
+        recommendationDisplayEl.innerHTML = '<p>No recommendation data received.</p>';
+        return;
+    }
+
+    const block = document.createElement('div');
+    block.className = 'recommendation-block';
+
+    const title = document.createElement('h3');
+    title.textContent = data.is_trade_recommended ? 'Trade Recommendation' : 'Trade Not Recommended';
+    if (!data.is_trade_recommended) {
+        title.style.color = '#d8000c';
+    }
+    block.appendChild(title);
+
+    if (data.original_suggestion) {
+        const origP = document.createElement('p');
+        origP.innerHTML = `Original Suggestion: <span class="option-detail">${formatOption(data.original_suggestion)}</span>`;
+        block.appendChild(origP);
+    }
+
+    if (data.adjusted_suggestion) {
+        const adjP = document.createElement('p');
+        adjP.innerHTML = `Adjusted Suggestion: <span class="option-detail">${formatOption(data.adjusted_suggestion)}</span>`;
+        block.appendChild(adjP);
+    }
+
+    const maxLossP = document.createElement('p');
+    maxLossP.innerHTML = `Calculated Max Loss on Suggestion: <span style="font-weight:bold;">${data.max_loss_on_suggestion ? data.max_loss_on_suggestion.toFixed(2) : 'N/A'}</span>`;
+    block.appendChild(maxLossP);
+
+    if (data.notes && data.notes.length > 0) {
+        const notesDiv = document.createElement('div');
+        notesDiv.className = 'recommendation-notes';
+        const notesTitle = document.createElement('h4');
+        notesTitle.textContent = 'Notes:';
+        notesDiv.appendChild(notesTitle);
+        const notesList = document.createElement('ul');
+        data.notes.forEach(note => {
+            const item = document.createElement('li');
+            item.textContent = note;
+            notesList.appendChild(item);
+        });
+        notesDiv.appendChild(notesList);
+        block.appendChild(notesDiv);
+    }
+
+    if (data.warnings && data.warnings.length > 0) {
+        const warningsDiv = document.createElement('div');
+        warningsDiv.className = 'recommendation-warnings';
+        const warningsTitle = document.createElement('h4');
+        warningsTitle.textContent = 'Warnings:';
+        warningsDiv.appendChild(warningsTitle);
+        const warningsList = document.createElement('ul');
+        data.warnings.forEach(warning => {
+            const item = document.createElement('li');
+            item.textContent = warning;
+            warningsList.appendChild(item);
+        });
+        warningsDiv.appendChild(warningsList);
+        block.appendChild(warningsDiv);
+    }
+    recommendationDisplayEl.appendChild(block);
+}
+
+function formatOption(option) {
+    if (!option) return 'N/A';
+    return `${option.strike_price} ${option.option_type} @ ${option.premium.toFixed(2)} (Delta: ${option.delta !== null ? option.delta.toFixed(2) : 'N/A'}, Theta: ${option.theta !== null ? option.theta.toFixed(2) : 'N/A'})`;
+}
+    // Example structure:
+    // showLoader(recommendationLoaderEl);
+    // hideError(recommendationErrorEl);
+    // recommendationDisplayEl.innerHTML = ''; // Clear previous results
+    // try {
+    //     const formData = new FormData(recommendationForm);
+    //     const params = Object.fromEntries(formData.entries());
+    //     const indexName = indexSelect.value; // Assuming recommendation is for the currently selected index
+    //     const data = await fetchFromAPI(`/recommendation/${indexName}`, params);
+    //     // Update DOM with recommendation data
+    // } catch (error) {
+    //     showError(recommendationErrorEl, error.message);
+    // } finally {
+    //     hideLoader(recommendationLoaderEl);
+    // }
+}
+
+
+// --- Event Listeners ---
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM fully loaded and parsed.');
+
+    if (fetchMarketDataBtn) {
+        fetchMarketDataBtn.addEventListener('click', handleFetchMarketData); // Listener activated
+        console.log('Fetch market data button event listener activated.');
+    } else {
+        console.error('Fetch market data button not found.');
+    }
+
+    if (recommendationForm) {
+        recommendationForm.addEventListener('submit', handleGetRecommendation); // Still placeholder
+        console.log('Recommendation form event listener placeholder ready.');
+    } else {
+        console.error('Recommendation form not found.');
+    }
+});
+
+console.log('script.js loaded.');

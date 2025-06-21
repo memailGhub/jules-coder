@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./app/backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000" # Map host port 8000 to container port 8000
+    volumes:
+      # Mount a volume for the SQLite database to persist data
+      # This creates trading_analysis.db in the project root on the host if it doesn't exist,
+      # or uses an existing one.
+      # The Dockerfile for backend places trading_analysis.db in /app/backend/
+      # So, the mount point in container should be /app/backend/trading_analysis.db
+      - ./trading_analysis.db:/app/backend/trading_analysis.db
+    networks:
+      - trading_app_network
+    # Optional: Add healthcheck if needed
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:8000/docs"] # or a dedicated health endpoint
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+
+  frontend:
+    build:
+      context: ./app/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80" # Map host port 8080 to Nginx container port 80
+    depends_on:
+      - backend # Ensures backend starts before frontend (though frontend might still need to retry connections)
+    networks:
+      - trading_app_network
+
+networks:
+  trading_app_network:
+    driver: bridge

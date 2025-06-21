@@ -1,106 +1,117 @@
 from fastapi import FastAPI, HTTPException, Query
-from typing import Optional, List
+from sqlalchemy.orm import Session
+from fastapi import Depends
+from typing import Optional, List, Dict, Any
 import datetime
 
-# Assuming your project structure allows these imports
-# If you have issues, you might need to adjust PYTHONPATH or use relative imports differently
 from app.backend.data_fetching.data_store import DataStore
-from app.backend.data_fetching.models import MarketData, OptionData # For response models
+from app.backend.database import create_db_and_tables # For startup
+from app.backend.data_fetching.models import MarketData, OptionData
 from app.backend.strategy_engine.strategy import StrategyEngine
+from app.backend.risk_assessment.assessment import RiskAssessor
+from app.backend.risk_assessment.risk_models import UserRiskProfile, RiskAssessmentOutput, RiskAssessmentInput
+from app.backend.database import get_db, log_recommendation_to_db # For logging
 
 # Initialize FastAPI app
 app = FastAPI(
     title="Quantitative Trading Analysis API",
     description="API for fetching market data and getting trading strategy recommendations.",
-    version="0.1.0"
+    version="0.3.0" # Version updated for DB logging
 )
 
-# Initialize DataStore globally or manage its lifecycle as appropriate
-# For simplicity, we'll get the instance here.
-# In a production app, you might initialize it in startup events.
 data_store = DataStore()
 
-# --- API Lifespan Events ---
 @app.on_event("startup")
 async def startup_event():
-    """
-    Actions to perform on API startup.
-    Initializes data sources for NIFTY and BANKNIFTY.
-    """
-    # Initialize data sources you want to use.
-    # These will start their respective refresh threads.
-    # Using shorter refresh intervals for demonstration.
+    print("API Startup: Initializing database...")
+    create_db_and_tables()
     print("API Startup: Initializing data sources...")
     data_store.initialize_data_source(index_name="NIFTY", initial_spot=21500, refresh_interval=10)
     data_store.initialize_data_source(index_name="BANKNIFTY", initial_spot=45000, refresh_interval=12)
+    data_store.initialize_data_source(index_name="TEST_NIFTY", initial_spot=20000, refresh_interval=15)
     print("API Startup: Data sources initialized.")
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """
-    Actions to perform on API shutdown.
-    Stops data refresh threads.
-    """
     print("API Shutdown: Stopping data refresh threads...")
     data_store.stop_refresh()
     print("API Shutdown: Data refresh threads stopped.")
 
-# --- API Endpoints ---
-
 @app.get("/live-data/{index_name}", response_model=Optional[MarketData])
 async def get_live_data(index_name: str):
-    """
-    Fetches the latest live market data for the specified index (NIFTY or BANKNIFTY).
-    Includes spot price, VWAP, ATR, and option chains.
-    """
-    if index_name.upper() not in ["NIFTY", "BANKNIFTY"]:
-        raise HTTPException(status_code=400, detail="Invalid index name. Use 'NIFTY' or 'BANKNIFTY'.")
+    if index_name.upper() not in ["NIFTY", "BANKNIFTY", "TEST_NIFTY"]:
+        raise HTTPException(status_code=400, detail="Invalid index name. Use 'NIFTY', 'BANKNIFTY', or 'TEST_NIFTY'.")
 
     market_data = data_store.get_market_data(index_name.upper())
     if not market_data:
         raise HTTPException(status_code=404, detail=f"Market data not yet available for {index_name.upper()}. Please try again shortly.")
     return market_data
 
-@app.get("/recommendation/{index_name}")
+@app.get("/recommendation/{index_name}", response_model=RiskAssessmentOutput)
 async def get_strategy_recommendation(
     index_name: str,
     option_type: str = Query(..., description="Option type: 'CE' for Call or 'PE' for Put", pattern="^(CE|PE)$"),
-    risk_profile: str = Query("moderate", description="Risk profile: 'low', 'moderate', or 'high'", pattern="^(low|moderate|high)$"),
-    expiry_preference: str = Query("weekly", description="Preferred expiry: 'weekly' or 'monthly'", pattern="^(weekly|monthly)$")
+    strategy_risk_profile: str = Query("moderate", description="Strategy risk profile for option selection style: 'low', 'moderate', or 'high'", pattern="^(low|moderate|high)$"),
+    max_loss_amount: float = Query(..., description="User's maximum acceptable loss for this trade in currency units (e.g., 1500 for Rs. 1500). Must be positive."),
+    expiry_preference: str = Query("weekly", description="Preferred expiry: 'weekly' or 'monthly'", pattern="^(weekly|monthly)$"),
+    db: Session = Depends(get_db)
 ):
     """
-    Provides a trading recommendation based on the implemented strategy.
-
-    - **index_name**: Name of the index (e.g., "NIFTY", "BANKNIFTY").
-    - **option_type**: "CE" (Call) or "PE" (Put).
-    - **risk_profile**: "low", "moderate", or "high". Affects Delta selection.
-    - **expiry_preference**: "weekly" or "monthly". For selecting the option chain.
+    Provides a trading recommendation based on the implemented strategy,
+    adjusted for the user's risk tolerance. Logs the event to the database.
     """
-    if index_name.upper() not in ["NIFTY", "BANKNIFTY"]:
-        raise HTTPException(status_code=400, detail="Invalid index name. Use 'NIFTY' or 'BANKNIFTY'.")
+    if index_name.upper() not in ["NIFTY", "BANKNIFTY", "TEST_NIFTY"]:
+        raise HTTPException(status_code=400, detail="Invalid index name. Use 'NIFTY', 'BANKNIFTY', or 'TEST_NIFTY'.")
+    if max_loss_amount <= 0:
+        raise HTTPException(status_code=400, detail="max_loss_amount must be positive.")
 
     current_market_data = data_store.get_market_data(index_name.upper())
     if not current_market_data:
         raise HTTPException(status_code=404, detail=f"Market data not available for {index_name.upper()} to generate recommendation.")
 
-    # Ensure timestamp is recent enough, otherwise data might be stale
-    # This check can be more sophisticated
-    if (datetime.datetime.now() - current_market_data.timestamp).total_seconds() > 120: # 2 minutes
+    if (datetime.datetime.now() - current_market_data.timestamp).total_seconds() > 120: # 2 minutes stale
          raise HTTPException(status_code=503, detail=f"Market data for {index_name.upper()} is stale. Please try again.")
 
-
     strategy_engine = StrategyEngine(current_market_data)
-
-    suggestion = strategy_engine.suggest_strike(
+    raw_suggestion_dict = strategy_engine.suggest_strike(
         option_type=option_type.upper(),
-        risk_profile=risk_profile
-    ) # expiry_preference is handled within suggest_strike for now
+        risk_profile=strategy_risk_profile
+    )
 
-    if not suggestion or not suggestion.get("option"):
-        justification = suggestion.get("justification", "No suitable option found based on current strategy rules.")
-        raise HTTPException(status_code=404, detail=justification)
+    initial_option_suggested = raw_suggestion_dict.get("option") if raw_suggestion_dict else None
+    assessment_result: RiskAssessmentOutput
 
-    return suggestion
+    if not initial_option_suggested:
+        justification = raw_suggestion_dict.get("justification", "No suitable option found by core strategy.")
+        assessment_result = RiskAssessmentOutput(
+            original_suggestion=None,
+            is_trade_recommended=False,
+            max_loss_on_suggestion=0,
+            warnings=[justification],
+            notes=["Core strategy engine did not find a suitable initial option."]
+        )
+    else:
+        user_profile = UserRiskProfile(max_loss_per_trade=max_loss_amount)
+        risk_assessor = RiskAssessor(market_data=current_market_data, user_profile=user_profile)
+        assessment_result = risk_assessor.assess_trade_risk(initial_suggestion=initial_option_suggested)
+        assessment_result.notes.append(f"Initial strategy justification: {raw_suggestion_dict.get('justification', 'N/A')}")
+
+    try:
+        log_recommendation_to_db(
+            db=db,
+            index_name=index_name.upper(),
+            option_type=option_type.upper(),
+            strategy_risk_profile=strategy_risk_profile,
+            max_loss_amount=max_loss_amount,
+            expiry_preference=expiry_preference,
+            assessment_output=assessment_result
+        )
+    except Exception as log_error:
+        print(f"Failed to log recommendation to DB: {log_error}")
+        # assessment_result.notes.append("Note: Failed to save this recommendation to the log.")
+
+    return assessment_result
+
 
 @app.get("/spread-recommendation/{index_name}")
 async def get_spread_recommendation(
@@ -110,30 +121,21 @@ async def get_spread_recommendation(
     premium: float = Query(..., description="Premium of the bought option"),
     delta: float = Query(..., description="Delta of the bought option"),
     theta: float = Query(..., description="Theta of the bought option"),
-    risk_tolerance_loss: float = Query(1500, description="Maximum acceptable loss for the spread in currency units (e.g., rupees).")
+    risk_tolerance_loss: float = Query(1500, description="Maximum acceptable loss for the spread in currency units (e.g., rupees).") # Removed extra parenthesis here
 ):
-    """
-    (Placeholder) Recommends a spread trade to accompany a primary bought option,
-    aiming for Theta neutralisation for overnight positions.
-
-    This endpoint currently uses placeholder logic for spread selection.
-    """
-    if index_name.upper() not in ["NIFTY", "BANKNIFTY"]:
-        raise HTTPException(status_code=400, detail="Invalid index name. Use 'NIFTY' or 'BANKNIFTY'.")
+    if index_name.upper() not in ["NIFTY", "BANKNIFTY", "TEST_NIFTY"]:
+        raise HTTPException(status_code=400, detail="Invalid index name. Use 'NIFTY', 'BANKNIFTY', or 'TEST_NIFTY'.")
 
     current_market_data = data_store.get_market_data(index_name.upper())
     if not current_market_data:
         raise HTTPException(status_code=404, detail=f"Market data not available for {index_name.upper()} to generate spread recommendation.")
 
-    # Create a mock OptionData object from query parameters for the base leg
-    # In a real app, you might pass an ID of an option or more complete details
     base_option = OptionData(
         strike_price=strike_price,
         option_type=option_type.upper(),
         premium=premium,
         delta=delta,
         theta=theta
-        # OI and Volume are not strictly needed for this specific spread logic, but could be
     )
 
     strategy_engine = StrategyEngine(current_market_data)
@@ -147,20 +149,7 @@ async def get_spread_recommendation(
 
     return spread_suggestion
 
-
-# To run the app (from the root directory of the project):
-# uvicorn app.backend.api.main:app --reload --port 8000
-#
-# Example URLs once running:
-# http://localhost:8000/docs (for Swagger UI)
-# http://localhost:8000/live-data/NIFTY
-# http://localhost:8000/live-data/BANKNIFTY
-# http://localhost:8000/recommendation/NIFTY?option_type=CE&risk_profile=moderate
-# http://localhost:8000/recommendation/BANKNIFTY?option_type=PE&risk_profile=low&expiry_preference=monthly
-# http://localhost:8000/spread-recommendation/NIFTY?strike_price=21500&option_type=CE&premium=150&delta=0.5&theta=12&risk_tolerance_loss=2000
-
 if __name__ == "__main__":
-    # This block is for direct execution if needed, but uvicorn is preferred for serving.
     import uvicorn
     print("Starting Uvicorn server for FastAPI app. Access at http://localhost:8000/docs")
     uvicorn.run(app, host="0.0.0.0", port=8000)

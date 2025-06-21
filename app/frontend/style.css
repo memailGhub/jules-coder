@@ -1,0 +1,172 @@
+body {
+    font-family: sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+header {
+    background: #333;
+    color: #fff;
+    padding: 1rem 0;
+    text-align: center;
+}
+
+header h1 {
+    margin: 0;
+}
+
+main {
+    max-width: 960px;
+    margin: 20px auto;
+    padding: 20px;
+    background: #fff;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+section {
+    margin-bottom: 20px;
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+h2 {
+    color: #333;
+    margin-top: 0;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 0.5rem;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+input[type="number"],
+select {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box; /* Important for consistent sizing */
+}
+
+button {
+    display: inline-block;
+    background: #5cb85c;
+    color: #fff;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+button:hover {
+    background: #4cae4c;
+}
+
+hr {
+    margin: 30px 0;
+    border: 0;
+    border-top: 1px solid #eee;
+}
+
+footer {
+    text-align: center;
+    margin-top: 20px;
+    padding: 20px;
+    background: #333;
+    color: #fff;
+}
+
+/* Display areas */
+#market-data-display p,
+#recommendation-display div { /* Assuming recommendation details are in divs */
+    margin: 5px 0;
+    padding: 8px;
+    background-color: #e9e9e9;
+    border-radius: 3px;
+}
+
+#market-data-display p span,
+#recommendation-display span { /* For dynamic values */
+    font-weight: bold;
+}
+
+/* Loader and Error Message Styling */
+.loader {
+    padding: 10px;
+    text-align: center;
+    color: #555;
+    font-style: italic;
+}
+
+.error-message {
+    padding: 10px;
+    background-color: #ffdddd;
+    border: 1px solid #ffaaaa;
+    color: #d8000c;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+/* Recommendation specific styling */
+#recommendation-display .recommendation-block {
+    border: 1px solid #ccc;
+    padding: 15px;
+    margin-bottom: 15px;
+    border-radius: 5px;
+}
+
+#recommendation-display .recommendation-block h3 {
+    margin-top: 0;
+    color: #337ab7; /* A blueish color for headers */
+}
+
+#recommendation-display .recommendation-warnings {
+    color: #a94442; /* Dark red for warnings */
+    background-color: #f2dede;
+    border-color: #ebccd1;
+    padding: 10px;
+    border-radius: 4px;
+}
+#recommendation-display .recommendation-warnings ul {
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-left: 20px;
+}
+
+#recommendation-display .recommendation-notes {
+    color: #3c763d; /* Dark green for notes */
+    background-color: #dff0d8;
+    border-color: #d6e9c6;
+    padding: 10px;
+    border-radius: 4px;
+}
+#recommendation-display .recommendation-notes ul {
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-left: 20px;
+}
+
+#recommendation-display .option-detail {
+    margin-left: 10px;
+    font-family: monospace;
+    background-color: #f9f9f9;
+    padding: 5px;
+    border-radius: 3px;
+}
+
+
+/* Disabled button style */
+button:disabled {
+    background-color: #ccc;
+    color: #666;
+    cursor: not-allowed;
+}

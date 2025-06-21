@@ -1,0 +1,118 @@
+/async function handleGetRecommendation(event) {/ {
+  i\
+async function handleGetRecommendation(event) {\
+    event.preventDefault(); \
+    showLoader(recommendationLoaderEl);\
+    hideError(recommendationErrorEl);\
+    recommendationDisplayEl.innerHTML = ''; \
+\
+    const indexName = indexSelect.value; \
+    if (!indexName) {\
+        showError(recommendationErrorEl, 'Please select an index first from the Market Snapshot section.');\
+        hideLoader(recommendationLoaderEl);\
+        return;\
+    }\
+\
+    const formData = new FormData(recommendationForm);\
+    const params = Object.fromEntries(formData.entries());\
+\
+    if (!params.max_loss_amount || parseFloat(params.max_loss_amount) <= 0) {\
+        showError(recommendationErrorEl, 'Max Loss Amount must be a positive number.');\
+        hideLoader(recommendationLoaderEl);\
+        return;\
+    }\
+\
+    try {\
+        const data = await fetchFromAPI(`/recommendation/${indexName}`, params);\
+        displayRecommendation(data);\
+    } catch (error) {\
+        showError(recommendationErrorEl, `Failed to get recommendation: ${error.message}`);\
+        recommendationDisplayEl.innerHTML = '<p>Could not retrieve a recommendation. Please check inputs and try again.</p>';\
+    } finally {\
+        hideLoader(recommendationLoaderEl);\
+    }\
+}\
+\
+function displayRecommendation(data) {\
+    recommendationDisplayEl.innerHTML = ''; \
+\
+    if (!data) {\
+        recommendationDisplayEl.innerHTML = '<p>No recommendation data received.</p>';\
+        return;\
+    }\
+\
+    const block = document.createElement('div');\
+    block.className = 'recommendation-block';\
+\
+    const title = document.createElement('h3');\
+    title.textContent = data.is_trade_recommended ? 'Trade Recommendation' : 'Trade Not Recommended';\
+    if (!data.is_trade_recommended) {\
+        title.style.color = '#d8000c'; \
+    }\
+    block.appendChild(title);\
+\
+    if (data.original_suggestion) {\
+        const origP = document.createElement('p');\
+        origP.innerHTML = `Original Suggestion: <span class="option-detail">${formatOption(data.original_suggestion)}</span>`;\
+        block.appendChild(origP);\
+    }\
+\
+    if (data.adjusted_suggestion) {\
+        const adjP = document.createElement('p');\
+        adjP.innerHTML = `Adjusted Suggestion: <span class="option-detail">${formatOption(data.adjusted_suggestion)}</span>`;\
+        block.appendChild(adjP);\
+    }\
+\
+    const maxLossP = document.createElement('p');\
+    maxLossP.innerHTML = `Calculated Max Loss on Suggestion: <span style="font-weight:bold;">${data.max_loss_on_suggestion ? data.max_loss_on_suggestion.toFixed(2) : 'N/A'}</span>`;\
+    block.appendChild(maxLossP);\
+\
+    if (data.notes && data.notes.length > 0) {\
+        const notesDiv = document.createElement('div');\
+        notesDiv.className = 'recommendation-notes';\
+        const notesTitle = document.createElement('h4');\
+        notesTitle.textContent = 'Notes:';\
+        notesDiv.appendChild(notesTitle);\
+        const notesList = document.createElement('ul');\
+        data.notes.forEach(note => {\
+            const item = document.createElement('li');\
+            item.textContent = note;\
+            notesList.appendChild(item);\
+        });\
+        notesDiv.appendChild(notesList);\
+        block.appendChild(notesDiv);\
+    }\
+\
+    if (data.warnings && data.warnings.length > 0) {\
+        const warningsDiv = document.createElement('div');\
+        warningsDiv.className = 'recommendation-warnings';\
+        const warningsTitle = document.createElement('h4');\
+        warningsTitle.textContent = 'Warnings:';\
+        warningsDiv.appendChild(warningsTitle);\
+        const warningsList = document.createElement('ul');\
+        data.warnings.forEach(warning => {\
+            const item = document.createElement('li');\
+            item.textContent = warning;\
+            warningsList.appendChild(item);\
+        });\
+        warningsDiv.appendChild(warningsList);\
+        block.appendChild(warningsDiv);\
+    }\
+    recommendationDisplayEl.appendChild(block);\
+}\
+\
+function formatOption(option) {\
+    if (!option) return 'N/A';\
+    return `${option.strike_price} ${option.option_type} @ ${option.premium.toFixed(2)} (Delta: ${option.delta !== null ? option.delta.toFixed(2) : 'N/A'}, Theta: ${option.theta !== null ? option.theta.toFixed(2) : 'N/A'})`;\
+}
+  :loop
+  N
+  /console.log('handleGetRecommendation called. Implementation pending.');/!b loop
+  /}/b
+  d
+}
+
+/if (recommendationForm) {/ {
+  N
+  s|// recommendationForm.addEventListener('submit', handleGetRecommendation);|recommendationForm.addEventListener('submit', handleGetRecommendation);|
+}

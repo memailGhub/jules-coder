@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Analysis Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>Quantitative Options Trading Analysis</h1>
+    </header>
+
+    <main>
+        <section id="market-data-section">
+            <h2>Market Snapshot</h2>
+            <div>
+                <label for="index-select">Select Index:</label>
+                <select id="index-select">
+                    <option value="NIFTY">NIFTY</option>
+                    <option value="BANKNIFTY">BANKNIFTY</option>
+                    <option value="TEST_NIFTY">TEST_NIFTY</option>
+                </select>
+                <button id="fetch-market-data-btn">Fetch Market Data</button>
+            </div>
+            <div id="market-data-display">
+                <p>Spot Price: <span id="spot-price">-</span></p>
+                <p>VWAP: <span id="vwap">-</span></p>
+                <p>ATR: <span id="atr">-</span></p>
+                <p id="market-data-timestamp">Last updated: -</p>
+            </div>
+            <div id="market-data-loader" class="loader" style="display: none;">Loading market data...</div>
+            <div id="market-data-error" class="error-message" style="display: none;"></div>
+        </section>
+
+        <hr>
+
+        <section id="strategy-recommendation-section">
+            <h2>Strategy Recommendation</h2>
+            <form id="recommendation-form">
+                <div>
+                    <label for="option-type-select">Option Type:</label>
+                    <select id="option-type-select" name="option_type">
+                        <option value="CE">Call (CE)</option>
+                        <option value="PE">Put (PE)</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="strategy-risk-profile-select">Strategy Profile:</label>
+                    <select id="strategy-risk-profile-select" name="strategy_risk_profile">
+                        <option value="low">Low Risk</option>
+                        <option value="moderate" selected>Moderate Risk</option>
+                        <option value="high">High Risk</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="max-loss-input">Max Loss Amount (₹):</label>
+                    <input type="number" id="max-loss-input" name="max_loss_amount" value="1500" min="1">
+                </div>
+                 <div>
+                    <label for="expiry-preference-select">Expiry Preference:</label>
+                    <select id="expiry-preference-select" name="expiry_preference">
+                        <option value="weekly" selected>Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                </div>
+                <button type="submit">Get Recommendation</button>
+            </form>
+            <div id="recommendation-display">
+                <!-- Recommendation details will be populated here by JavaScript -->
+            </div>
+            <div id="recommendation-loader" class="loader" style="display: none;">Fetching recommendation...</div>
+            <div id="recommendation-error" class="error-message" style="display: none;"></div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2023 Trading Analysis Tool. For educational purposes only.</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

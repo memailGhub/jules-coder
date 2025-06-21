@@ -1,0 +1,10 @@
+/async function handleFetchMarketData\(\) {/a\
+    fetchMarketDataBtn.disabled = true;
+/    hideLoader(marketDataLoaderEl);/a\
+        fetchMarketDataBtn.disabled = false;
+
+/async function handleGetRecommendation(event) {/a\
+    const submitButton = recommendationForm.querySelector('button[type="submit"]');\
+    if(submitButton) submitButton.disabled = true;
+/    hideLoader(recommendationLoaderEl);/a\
+        if(submitButton) submitButton.disabled = false;
